@@ -33,6 +33,8 @@ export default function App() {
   // Refs
   const timerRef = useRef<number | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef<boolean>(false);
+  const lastHoverRef = useRef<Position | null>(null);
 
   // --- Helpers for Floating Text ---
   const addFloatingText = (x: number, y: number, text: string, color: string = 'text-white') => {
@@ -150,6 +152,8 @@ export default function App() {
 
     if (dyingIds.has(block.id)) return;
 
+    draggingRef.current = true;
+    lastHoverRef.current = { row, col };
     setSelectedPath([{ row, col }]);
   };
 
@@ -204,6 +208,8 @@ export default function App() {
   };
 
   const handlePointerUp = () => {
+    draggingRef.current = false;
+    lastHoverRef.current = null;
     if (gameState.status !== 'playing' || selectedPath.length === 0) {
       setSelectedPath([]);
       return;
@@ -215,6 +221,26 @@ export default function App() {
     }
 
     triggerCollapse();
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!draggingRef.current || selectedPath.length === 0) return;
+    const rect = gridRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const stride = actualCellSize + gap;
+    const col = Math.floor((x - gap) / stride);
+    const row = Math.floor((y - gap) / stride);
+    if (row < 0 || col < 0 || row >= gameState.gridSize || col >= gameState.gridSize) return;
+    const innerX = x - (gap + col * stride);
+    const innerY = y - (gap + row * stride);
+    if (innerX < 0 || innerY < 0 || innerX > actualCellSize || innerY > actualCellSize) return;
+    const last = lastHoverRef.current;
+    if (!last || last.row !== row || last.col !== col) {
+      handlePointerEnter(row, col);
+      lastHoverRef.current = { row, col };
+    }
   };
 
   const triggerCollapse = () => {
@@ -461,14 +487,16 @@ export default function App() {
         <div 
             ref={gridRef}
             className="relative bg-gray-800 rounded-xl shadow-2xl border border-gray-700 overflow-hidden"
-            style={{ 
-                width: boardSize, 
-                height: boardSize,
-                touchAction: 'none' 
-            }}
-            onPointerLeave={handlePointerUp}
-            onPointerUp={handlePointerUp}
-        >
+        style={{ 
+            width: boardSize, 
+            height: boardSize,
+            touchAction: 'none' 
+        }}
+        onPointerMove={handlePointerMove}
+        onPointerLeave={handlePointerUp}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+      >
             {/* Render Blocks */}
             {flatBlocks.map((block) => {
                 const isSelected = selectedPath.some(p => p.row === block.r && p.col === block.c);
